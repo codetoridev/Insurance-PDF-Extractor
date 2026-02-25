@@ -590,8 +590,9 @@ function parseData(rawText) {
     const m = text.match(/Policy No\.\s*([\d\s]+?)(?:\n|Client)/i);
     if (m) policyNo = m[1].trim();
   } else if (company === 'Go Digit General Insurance') {
-    const m = text.match(/([A-Z]\d+)\s*\/\s*(\d+)\s*Policy No\./i);
-    if (m) policyNo = m[1].trim() + '/' + m[2].trim();
+    const m = text.match(/Policy No\.\s*([A-Z0-9]+\s*\/\s*\d+)/i) ||
+              text.match(/([A-Z]\d+)\s*\/\s*(\d+)/i);
+    if (m) policyNo = (m[1] || (m[1] + '/' + m[2])).replace(/\s+/g,'');
   } else if (company === 'SBI General Insurance') {
     const m = text.match(/Policy\s*[\/]?\s*Certificate\s*No[:\s.]+([A-Z0-9]+)/i) ||
               text.match(/Policy Number\s*[:\s]+([A-Z0-9]+)/i);
@@ -645,7 +646,7 @@ function parseData(rawText) {
     const m = text.match(/Agent\/Intermediary Name[\s\S]*?\n([a-z][a-z ]{3,})[A-Z]{4,}/m);
     if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
   } else if (company === 'Go Digit General Insurance') {
-    const m = text.match(/Partner Name\s*\n([\s\S]+?(?:LIMITED|LTD|P Ltd)[A-Za-z\s.]*?)\n/im);
+    const m = text.match(/Partner Name\s*([A-Za-z0-9&.,\-\s]+?)(?:Partner Code|Mobile|Email|$)/i);
     if (m) agentName = m[1].replace(/\s+/g, ' ').trim();
   } else if (company === 'United India Insurance Co. Ltd.') {
 
@@ -786,6 +787,7 @@ if (agentName === 'NOT FOUND') {
 
   // ── EXPIRE DATE ──
   const expireDate = get(text, [
+    /(\d{2}-[A-Za-z]{3}-\d{4})\s+23:59:59/i,
     /To\s+Midnight\s+of\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
     /To\s+(\d{1,2}\s+\w{3},?\s+\d{4})\s+Midnight/i,
     /Policy Expiry Date:\s*Midnight on\s+(\d{1,2}-[A-Z]+-\d{4})/i,
@@ -809,6 +811,7 @@ if (agentName === 'NOT FOUND') {
 
   // ── TYPE ──
   const insType = get(text, [
+    /(Digit\s+Two-Wheeler\s+Liabilty\s+Only\s+Policy)/i,
     /(Standalone Motor Own Damage Policy for Private car[^\n]{0,40})/i,
     /(Two\s*Wheeler\s*Liability\s*Only\s*Policy)/i,
     /(Motor\s*-\s*Two\s*Wheelers\s*-\s*PACKAGE\s*POLICY)/i,
@@ -868,8 +871,8 @@ if (agentName === 'NOT FOUND') {
     if (mk) make = mk[1].trim();
     if (md) model = md[1].trim();
   } else if (company === 'Go Digit General Insurance') {
-    const mk = text.match(/Make\s*([A-Z][A-Z\s&]+?)\s*Model\/Vehicle/i);
-    const md = text.match(/Model\/Vehicle Variant \(Sub-Type\)\s*([A-Za-z0-9\/\s\-]+?)(?:\n|Engine)/i);
+    const mk = text.match(/Make\s+([A-Z]+)/i);
+    const md = text.match(/Variant[\s\S]{0,40}?\n([A-Za-z0-9\/\-\s]+)/i);
     if (mk) make = mk[1].trim();
     if (md) model = md[1].split('/')[0].trim();
   } else if (company === 'National Insurance Company Ltd.') {
