@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insurance PDF Extractor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #1a1a1f;
+    --surface2: #22222a;
+    --border: #2e2e3a;
+    --accent: #6ee7b7;
+    --accent2: #f59e0b;
+    --danger: #f87171;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --success: #4ade80;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+  }
+
+  header .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  header .subtitle {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  header .spacer { flex: 1; }
+
+  .stats {
+    display: flex;
+    gap: 20px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+  }
+
+  .stat-item { text-align: right; }
+  .stat-val { color: var(--accent); font-size: 18px; font-weight: 700; }
+  .stat-label { color: var(--muted); font-size: 10px; }
+
+  main {
+    padding: 24px 28px;
+    max-width: 100%;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0f0f11;
+  }
+  .btn-primary:hover { background: #34d399; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+  }
+  .btn-danger:hover { background: rgba(248,113,113,0.1); }
+
+  .btn-excel {
+    background: #166534;
+    color: #bbf7d0;
+    border: 1px solid #15803d;
+  }
+  .btn-excel:hover { background: #15803d; }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .toolbar-sep {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  /* ── DROP ZONE ── */
+  #dropZone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  #dropZone:hover, #dropZone.drag-over {
+    border-color: var(--accent);
+    background: rgba(110,231,183,0.04);
+  }
+
+  #dropZone .drop-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+    opacity: 0.7;
+  }
+
+  #dropZone .drop-text {
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  #dropZone .drop-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  #fileInput { display: none; }
+
+  /* ── PROGRESS ── */
+  #progressBar {
+    display: none;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+    height: 6px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+
+  #progressFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #34d399);
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  #progressText {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  /* ── LOG ── */
+  #log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    max-height: 100px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  #log .log-ok { color: var(--success); }
+  #log .log-skip { color: var(--accent2); }
+  #log .log-err { color: var(--danger); }
+  #log .log-info { color: var(--muted); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  thead th {
+    background: var(--surface2);
+    padding: 10px 12px;
+    text-align: left;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+
+  thead th.col-action {
+    color: var(--muted);
+    width: 60px;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr.new-row { animation: fadeIn 0.4s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  tbody td {
+    padding: 7px 10px;
+    border-right: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  tbody td:last-child { border-right: none; }
+
+  tbody td[contenteditable="true"] {
+    cursor: text;
+    outline: none;
+    min-width: 80px;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tbody td[contenteditable="true"]:focus {
+    background: rgba(110,231,183,0.08);
+    color: var(--accent);
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .not-found {
+    color: var(--danger);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+  }
+
+  .del-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 15px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .del-btn:hover { color: var(--danger); background: rgba(248,113,113,0.1); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 13px;
+    color: var(--text);
+    display: none;
+    animation: slideUp 0.25s ease;
+    z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { display: flex; align-items: center; gap: 8px; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── EMPTY STATE ── */
+  #emptyState {
+    text-align: center;
+    padding: 48px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    background: rgba(110,231,183,0.1);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">📄 PDF → EXCEL</div>
+    <div class="subtitle">Insurance Policy Extractor — Local Only</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="stats">
+    <div class="stat-item">
+      <div class="stat-val" id="statTotal">0</div>
+      <div class="stat-label">TOTAL</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="statSkipped" style="color:var(--accent2)">0</div>
+      <div class="stat-label">SKIPPED</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val" id="statErrors" style="color:var(--danger)">0</div>
+      <div class="stat-label">ERRORS</div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+      ＋ Add PDFs
+    </button>
+    <input type="file" id="fileInput" accept=".pdf" multiple onchange="handleFiles(this.files)">
+
+    <button class="btn btn-excel" onclick="loadExistingExcel()">
+      📂 Load Excel
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <button class="btn btn-secondary" onclick="exportExcel()" id="exportBtn" disabled>
+      ⬇ Save Excel (.xlsx)
+    </button>
+
+    <button class="btn btn-danger" onclick="clearAll()" id="clearBtn" disabled>
+      🗑 Clear All
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <span style="font-size:11px; color:var(--muted)">
+      <span id="excelLoadedName" style="color:var(--accent)"></span>
+    </span>
+  </div>
+
+  <input type="file" id="excelInput" accept=".xlsx" style="display:none" onchange="handleExcelLoad(this)">
+
+  <div id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="drop-icon">☁️</div>
+    <div class="drop-text">Drop PDFs here or click to select</div>
+    <div class="drop-hint">Multiple files supported • Auto duplicate detection by Policy No.</div>
+  </div>
+
+  <div id="progressBar"><div id="progressFill"></div></div>
+  <div id="progressText"></div>
+  <div id="log"></div>
+
+  <div class="table-wrap">
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th>SR</th>
+          <th style="min-width:120px;max-width:200px;">PDF NAME</th>
+          <th>COMPANY NAME</th>
+          <th>POLICY NO</th>
+          <th>AGENT NAME</th>
+          <th>INVOICE DATE</th>
+          <th>EXPIRE DATE</th>
+          <th>TYPE</th>
+          <th>REG NO</th>
+          <th>MAKE</th>
+          <th>MODEL</th>
+          <th>OWNER NAME</th>
+          <th>PHONE NO</th>
+          <th>MAIL ID</th>
+          <th>NET PREMIUM</th>
+          <th>TOTAL PREMIUM</th>
+          <th class="col-action">DEL</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr id="emptyRow">
+          <td colspan="17" id="emptyState">No data yet — load a PDF or existing Excel file</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ─── PDF.js setup ────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─── STATE ───────────────────────────────────────────────────
+let rows = [];          // {id, fields}
+let existingPolicies = new Set();
+let excelFileName = 'REQUIRED_DITAILS.xlsx';
+let statTotal = 0, statSkipped = 0, statErrors = 0;
+
+const FIELDS = [
+  'COMPANY NAME','POLICY NO','AGENT NAME',
+  'POLICY INVOICE DATE','POLICY EXPIRE DATE','TYPE OF INSURANCE',
+  'REGISTRATION NO','MAKE','MODEL','OWNER NAME',
+  'PHONE NO','MAIL ID','NET PREMIUM','TOTAL PREMIUM'
+];
+
+// ─── DROP ZONE ───────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+
+// ─── FILE HANDLER ────────────────────────────────────────────
+async function handleFiles(files) {
+  const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!pdfs.length) return showToast('⚠️ No PDF files found', 'warn');
+
+  showLog(true);
+  showProgress(true);
+  logMsg(`Processing ${pdfs.length} PDF(s)...`, 'info');
+
+  for (let i = 0; i < pdfs.length; i++) {
+    const f = pdfs[i];
+    setProgress(((i) / pdfs.length) * 100, `${i+1}/${pdfs.length}: ${f.name}`);
+    try {
+      const text = await extractText(f);
+      const data = parseData(text);
+      data['PDF NAME'] = f.name;
+      const norm = normPolicy(data['POLICY NO']);
+      if (data['POLICY NO'] !== 'NOT FOUND' && existingPolicies.has(norm)) {
+        logMsg(`SKIP — ${f.name} → ${data['POLICY NO']}`, 'skip');
+        statSkipped++;
+        updStats();
+        continue;
+      }
+
+      addRow(data);
+      if (data['POLICY NO'] !== 'NOT FOUND') existingPolicies.add(norm);
+      logMsg(`OK — ${f.name} → ${data['COMPANY NAME']} | ${data['POLICY NO']}`, 'ok');
+      statTotal++;
+      updStats();
+    } catch(err) {
+      logMsg(`ERR — ${f.name}: ${err.message}`, 'err');
+      statErrors++;
+      updStats();
+    }
+  }
+
+  setProgress(100, 'Done!');
+  setTimeout(() => showProgress(false), 1500);
+  enableButtons();
+  showToast(`✅ Done! Added ${statTotal} | Skipped ${statSkipped} | Errors ${statErrors}`);
+}
+
+// ─── TEXT EXTRACTION ─────────────────────────────────────────
+async function extractText(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let fullText = '';
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items;
+    // Reconstruct text with newlines where Y position changes
+    let lastY = null;
+    for (const item of items) {
+      if ('str' in item) {
+        const y = item.transform[5];
+        if (lastY !== null && Math.abs(y - lastY) > 3) fullText += '\n';
+        fullText += item.str;
+        lastY = y;
+      }
+    }
+    fullText += '\n';
+  }
+  return fullText;
+}
+
+// ─── PARSE ENGINE (ported from your extract.js) ──────────────
+function normPolicy(p) {
+  return (p || '').toUpperCase().replace(/[\s\-\/]/g, '');
+}
+
+function get(text, patterns) {
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m && m[1]) {
+      const val = m[1].trim().replace(/\s+/g, ' ');
+      if (val && !['NA','N/A','--',''].includes(val.toUpperCase())) return val;
+    }
+  }
+  return 'NOT FOUND';
+}
+
+// Universal: find value after a label keyword
+function getAfterLabel(text, labels, valueRe) {
+  const reStr = (valueRe || /([^\n]{2,100})/).source;
+  for (const label of labels) {
+    const esc = label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s*');
+    const re = new RegExp(esc + '\\s*[:\\-\\.\\|]?\\s*' + reStr, 'im');
+    const m = text.match(re);
+    if (m && m[1]) {
+      const v = m[1].trim().replace(/\s+/g, ' ').replace(/[:\-\.]+$/, '').trim();
+      if (v.length >= 2 && !['NA','N/A','--','NIL',''].includes(v.toUpperCase())) return v;
+    }
+  }
+  return 'NOT FOUND';
+}
+
+function detectCompany(text) {
+  // Strategy: only look at the FIRST 800 chars (header/issuer section)
+  // This avoids false matches from "Previous Insurer", "Claim Hub", etc.
+  const header = text.substring(0, 800).toLowerCase();
+
+  // Helper: check if keyword appears in header OR as issuer pattern anywhere in text
+  // Issuer patterns: "XYZ Insurance Co. Ltd." appearing as standalone line or after "behalf of"
+  function isIssuer(keyword) {
+    if (header.includes(keyword)) return true;
+    // Check issuer patterns anywhere in doc - "For XYZ", "behalf of XYZ", "issued by XYZ"
+    const tl = text.toLowerCase();
+    const patterns = [/for hdfc ergo/i, /behalf of/i, /issued by/i, /underwritten by/i];
+    for (const pat of patterns) {
+      let match, re = new RegExp(pat.source, 'gi');
+      while ((match = re.exec(tl)) !== null) {
+        const chunk = tl.substring(match.index, match.index + 150);
+        if (chunk.includes(keyword)) return true;
+      }
+    }
+    return false;
+  }
+
+  if (isIssuer('hdfc ergo')) return 'HDFC ERGO General Insurance';
+  if (isIssuer('the new india') || isIssuer('new india assurance')) return 'New India Assurance Co. Ltd.';
+  if (isIssuer('tata aig') || isIssuer('tataaig')) return 'TATA AIG General Insurance';
+  if (isIssuer('go digit') || isIssuer('godigit')) return 'Go Digit General Insurance';
+  if (isIssuer('national insurance company')) return 'National Insurance Company Ltd.';
+  if (isIssuer('future generali') || isIssuer('generali central')) return 'Generali Central Insurance';
+  if (isIssuer('magmainsurance') || isIssuer('magma general')) return 'Magma General Insurance';
+  if (isIssuer('icici lombard')) return 'ICICI Lombard General Insurance';
+  if (isIssuer('reliance general')) return 'Reliance General Insurance';
+  if (isIssuer('bajaj allianz') || isIssuer('bajaj general')) return 'Bajaj General Insurance';
+  if (isIssuer('sbigeneral') || isIssuer('sbi general') || isIssuer('popmcar')) return 'SBI General Insurance';
+  if (isIssuer('united india insurance')) return 'United India Insurance Co. Ltd.';
+  if (isIssuer('royal sundaram')) return 'Royal Sundaram General Insurance';
+  if (isIssuer('iffco tokio') || isIssuer('iffco-tokio')) return 'IFFCO Tokio General Insurance';
+  if (isIssuer('oriental insurance')) return 'Oriental Insurance Co. Ltd.';
+  if (isIssuer('cholamandalam') || isIssuer('chola ms')) return 'Chola MS General Insurance';
+  if (isIssuer('shriram general')) return 'Shriram General Insurance';
+  if (isIssuer('liberty general') || isIssuer('liberty videocon')) return 'Liberty General Insurance';
+  if (isIssuer('universal sompo')) return 'Universal Sompo General Insurance';
+  if (isIssuer('kotak general') || isIssuer('kotak mahindra general')) return 'Kotak General Insurance';
+  if (isIssuer('acko')) return 'Acko General Insurance';
+  if (isIssuer('zurich kotak') || isIssuer('zurich india')) return 'Zurich Kotak General Insurance';
+  if (isIssuer('edelweiss')) return 'Edelweiss General Insurance';
+  if (isIssuer('raheja qbe')) return 'Raheja QBE General Insurance';
+  if (isIssuer('navi general')) return 'Navi General Insurance';
+  return 'Unknown';
+}
+
+function parseData(rawText) {
+  const company = detectCompany(rawText);
+  const text = rawText;
+
+  // ── POLICY NO ──
+  let policyNo = 'NOT FOUND';
+  if (company === 'HDFC ERGO General Insurance') {
+    // Policy No can have spaces: "2302 1015 1867 1200 000" → keep or remove spaces
+    const m = text.match(/Policy No\.?\s*([\d\s]{6,35}?)(?:Period|Issuance|\n)/i) ||
+              text.match(/Certificate of Insurance cum Policy Schedule\s*([\d]+)/i);
+    if (m) policyNo = m[1].trim().replace(/\s+/g, '');
+  } else if (company === 'TATA AIG General Insurance') {
+    const m = text.match(/Policy No\.\s*([\d\s]+?)(?:\n|Client)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Go Digit General Insurance') {
+    const m = text.match(/Policy No\.\s*([A-Z0-9]+\s*\/\s*\d+)/i) ||
+              text.match(/([A-Z]\d+)\s*\/\s*(\d+)/i);
+    if (m) policyNo = (m[1] || (m[1] + '/' + m[2])).replace(/\s+/g,'');
+  } else if (company === 'SBI General Insurance') {
+    const m = text.match(/Policy\s*[\/]?\s*Certificate\s*No[:\s.]+([A-Z0-9]+)/i) ||
+              text.match(/Policy Number\s*[:\s]+([A-Z0-9]+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Reliance General Insurance') {
+    const m = text.match(/Policy Number\s*[:\s]+(\d{15,20})/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'ICICI Lombard General Insurance') {
+    const m = text.match(/Policy No\.\s*\n?\s*[:\s]*\n?\s*([A-Z0-9]+(?:\/[A-Z0-9]+){2,})/i) ||
+              text.match(/enclosed Policy No\.\s*([A-Z0-9\/]+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Generali Central Insurance') {
+    const m = text.match(/Policy No\.\s*[:\s]*([0-9]+\/[0-9\/]+\/MTP\/[0-9]+)/i) ||
+              text.match(/policy number\s*([0-9]+\/[0-9\/]+\/MTP\/[0-9]+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Magma General Insurance') {
+    const m = text.match(/Policy No\s*([A-Z0-9]+\/[0-9]+\/[0-9]+)/i) ||
+              text.match(/Policy No\.\s*([A-Z][A-Z0-9\/]+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'New India Assurance Co. Ltd.') {
+    const m = text.match(/Policy No\. : (\d+)/i) ||
+              text.match(/Policy Number\s*:\s*(\d+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Royal Sundaram General Insurance') {
+    const m = text.match(/Policy No\.\s*[:\s]+([A-Z0-9]+)/i);
+    if (m) policyNo = m[1].trim();
+  } else if (company === 'Bajaj General Insurance') {
+    // Car: "Policy Number  12-1805-0009129901-00"
+    // Two-wheeler: "policy number 'OG-26-9906-1802-00534619'" or "Policy Number: OG-26-9906-1802-00534619"
+    const m = text.match(/policy number '([A-Z0-9-]+)'/i) ||
+              text.match(/PolicyNumber[:\s]+([A-Z0-9-]+)/i) ||
+              text.match(/Policy\s*Number[:\s]+([A-Z0-9]+(?:-[A-Z0-9]+){3,})/i) ||
+              text.match(/Policy\s*No\.\s+([A-Z0-9]+(?:-[A-Z0-9]+){2,})/i);
+    if (m) policyNo = m[1].trim();
+  } else {
+    const m = text.match(/POLICY NO\.[:\s]+([A-Z0-9]+)/i) ||
+              text.match(/Policy\s*Number\s*[:\s]+([A-Z0-9\-]{6,40})(?:\n|\s{2}|Period)/i) ||
+              text.match(/Policy\s*No\.?\s*[:\s]+([A-Z0-9\-\/]{6,40})(?:\n|\s{2})/i) ||
+              text.match(/PolicyNumber[:\s]+([A-Z0-9\-\/]+)/i) ||
+              text.match(/policy number['"s]*\s*[:\-]?\s*'?([A-Z0-9\-\/]+)'?/i) ||
+              text.match(/Policy Number\s+([0-9\-]{10,25})/i);
+    if (m) policyNo = m[1].trim();
+  }
+
+  // ── AGENT ──
+  let agentName = 'NOT FOUND';
+  if (company === 'HDFC ERGO General Insurance') {
+    const m = text.match(/BROKER\s*Name\s*[:\s]+([A-Za-z\s]+?(?:LIMITED|LTD|PVT)[A-Za-z\s.]*?)(?:\n|BROKER\s*Code)/i);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  } else if (company === 'TATA AIG General Insurance') {
+    const m = text.match(/Agent\/Intermediary Name[\s\S]*?\n([a-z][a-z ]{3,})[A-Z]{4,}/m);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  } else if (company === 'Go Digit General Insurance') {
+    const m = text.match(/Partner Name\s*([A-Za-z0-9&.,\-\s]+?)(?:Partner Code|Mobile|Email|$)/i);
+    if (m) agentName = m[1].replace(/\s+/g, ' ').trim();
+  } else if (company === 'United India Insurance Co. Ltd.') {
+
+// 1️⃣ Multi-line format (Old type)
+const uiMulti = text.match(
+  /Agent\s*Name\s*:\s*\n([\s\S]+?)\nAgent Code/i
+);
+
+if (uiMulti) {
+  agentName = uiMulti[1].replace(/\s+/g, ' ').trim();
+}
+
+// 2️⃣ Inline format (New type)
+if (agentName === 'NOT FOUND') {
+  const uiInline = text.match(
+    /Agent\s*Name\s*:\s*([A-Z][A-Z\s]+?)(?:\s{2,}|Dealer|Land|Mobile|$)/i
+  );
+  if (uiInline) {
+    agentName = uiInline[1].replace(/\s+/g, ' ').trim();
+  }
+}
+
+// 3️⃣ Agency/Broker Code format
+if (agentName === 'NOT FOUND') {
+  const uiBroker = text.match(
+    /Agency\/Broker Code:\s*\n?\s*([A-Z][A-Z\s]+?)(?:,|Mobile|Dealer|$)/i
+  );
+  if (uiBroker) {
+    agentName = uiBroker[1].replace(/\s+/g, ' ').trim();
+  }
+}
+
+// 4️⃣ Issuing Agent fallback
+if (agentName === 'NOT FOUND') {
+  const uiIssuing = text.match(
+    /Issuing Agent:\s*([A-Z][A-Z\s]+?)(?:\s+Printed|\s+Agent|\s+User|$)/i
+  );
+  if (uiIssuing) {
+    agentName = uiIssuing[1].replace(/\s+/g, ' ').trim();
+  }
+}
+}else if (company === 'National Insurance Company Ltd.') {
+    const m = text.match(/वनाम\s*Name:\s*([A-Za-z\s]+?)\n([A-Za-z]+)\n/i);
+    if (m) agentName = (m[1] + ' ' + m[2]).trim().replace(/\s+/g, ' ');
+  } else if (company === 'Generali Central Insurance') {
+    const m = text.match(/Intermediary Name\s*[:\s]+([A-Z][A-Z\s\n]+?(?:LIMITED|LTD|PVT)[A-Z\s.]*?)-\d/i);
+    if (m) agentName = m[1].replace(/\s+/g, ' ').trim();
+  } else if (company === 'Magma General Insurance') {
+    const m = text.match(/Agent\s*\/\s*Intermediary Name and Code[:\s]+([A-Za-z\s]+?(?:LIMITED|LTD|PVT)[A-Za-z\s.]*?)\s+(?:BRC|[A-Z]{3}\d)/i);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  } else if (company === 'ICICI Lombard General Insurance') {
+    // Page 4: "Agency Name : POLICY BAZAAR INSURANCE\nBROKERS PVT LTD"
+    const m = text.match(/Agency Name\s*[:\s]+([A-Z][A-Z\s]+?(?:LIMITED|LTD|PVT)[A-Z\s.]*?)\n(?:Agent|Contact|$)/im) ||
+              text.match(/Agency Name\s*\n+\s*:?\s*\n+([\s\S]+?(?:LIMITED|LTD|PVT)[A-Za-z\s.]*?)\n(?:Agent|$)/im) ||
+              // "Agency Name : POLICY BAZAAR INSURANCE" then "BROKERS PVT LTD" on next line
+              text.match(/Agency Name\s*[:\n\s]+([A-Z][A-Z\s]+)\n([A-Z][A-Z\s]+(?:LTD|LIMITED|PVT)[A-Z\s.]*)/im);
+    if (m) agentName = (m[1] + (m[2] ? ' ' + m[2] : '')).replace(/\s+/g, ' ').trim();
+  } else if (company === 'Reliance General Insurance') {
+    const m = text.match(/Intermediary Name\s*([A-Z][A-Z\s]+?(?:LIMITED|LTD|PVT)[A-Z\s.]*?)(?:Code\d|Code\s)/i);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  } else if (company === 'SBI General Insurance') {
+    const m = text.match(/Intermediary Name[:\s]+([A-Za-z\s]+?(?:LIMITED|LTD|P\s*Ltd|PVT|BROKERS)[A-Za-z\s.]*?)(?:\n|Intermediary Code)/i);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  } else if (company === 'Bajaj General Insurance') {
+    const twM = text.match(/Broker\s*Name\s*([A-Z][A-Z\s]+?(?:LIMITED|LIMTED|LTD)[A-Z\s]*?)(?:\n|E-Mail|Contact|BrokerCode)/i);
+    if (twM) agentName = twM[1].trim().replace(/\s+/g, ' ');
+    else {
+      const carM = text.match(/Agency Name\s+([A-Za-z\s]+?(?:SERVICES|FINANCIAL|LIMITED|LTD|PVT)[A-Za-z\s.]*?)(?:\s{2,}Email|\s+Sub\s+IMD|\n)/i);
+      if (carM) agentName = carM[1].trim().replace(/\s+/g, ' ');
+    }
+  } else if (company === 'New India Assurance Co. Ltd.') {
+    // 1️⃣ Mr./Mrs./Ms. Name - (NIAAG...) — handles same-line & multiline
+    const mrMatch = text.match(
+      /((?:Mr|Mrs|Ms)\.?\s+[A-Za-z][A-Za-z\s]{2,40}?)[\s\n\r]*-[\s\n\r]*\(NIAAG\d+\)/i
+    );
+    if (mrMatch) {
+      agentName = mrMatch[1].replace(/\s+/g, ' ').trim();
+    }
+
+    // 2️⃣ Generic Mr./Mrs./Ms. Name - (ANY_CODE)
+    if (agentName === 'NOT FOUND') {
+      const mrGeneric = text.match(
+        /((?:Mr|Mrs|Ms)\.?\s+[A-Za-z][A-Za-z\s]{2,40}?)[\s\n\r]*-[\s\n\r]*\([A-Z0-9]+\)/i
+      );
+      if (mrGeneric) {
+        agentName = mrGeneric[1].replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    // 3️⃣ Scan all NAME: lines, pick one starting with Mr/Mrs/Ms
+    if (agentName === 'NOT FOUND') {
+      const allNames = [...text.matchAll(/NAME\s*:\s*([^\n\r(]+?)(?:\s*-\s*\([A-Z0-9]+\))?[\n\r]/gi)];
+      for (const nm of allNames) {
+        const candidate = nm[1].replace(/\s+/g, ' ').trim();
+        if (/^(?:Mr|Mrs|Ms)\./i.test(candidate)) {
+          agentName = candidate;
+          break;
+        }
+      }
+    }
+
+    // 4️⃣ Final fallback: NAME: line that isn't DIRECT BUSINESS
+    if (agentName === 'NOT FOUND') {
+      const nameMatch = text.match(/NAME\s*:\s*([A-Z][A-Z\s]+?)\s*-\s*\([A-Z0-9]+\)/i);
+      if (nameMatch) {
+        const candidate = nameMatch[1].replace(/\s+/g, ' ').trim();
+        if (!candidate.toUpperCase().includes('DIRECT BUSINESS')) {
+          agentName = candidate;
+        }
+      }
+    }
+  } else if (company === 'Royal Sundaram General Insurance') {
+    // "Intermediary Name: Policybazaar Insurance Brokers Private Limited Contact: ..."
+    const m = text.match(/Intermediary Name[:\s]+([A-Za-z\s]+?(?:LIMITED|LTD|PVT)[A-Za-z\s.]*?)(?:\n|Contact|$)/i);
+    if (m) agentName = m[1].trim().replace(/\s+/g, ' ');
+  }
+
+  // ── INVOICE DATE ──
+  let invoiceDate = 'NOT FOUND';
+  if (company === 'Go Digit General Insurance') {
+    // Policy Issue Date or Invoice Date - allow newline between label and value
+    const m = text.match(/Policy Issue Date[\s\n]+(\d{2}-[A-Za-z]{3}-\d{4})/im) ||
+              text.match(/Invoice Date[\s\n]+(\d{2}-[A-Za-z]{3}-\d{4})/im) ||
+              text.match(/Invoice Date[\s\n]+(\d{4}-\d{2}-\d{2})/im) ||
+              // Endorsement table row: "IA240936425 2026-02-23" - this is invoice date in YYYY-MM-DD
+              text.match(/IA\d+[\s\n]+(\d{4}-\d{2}-\d{2})/im);
+    if (m) {
+      let d = m[1].trim();
+      // Convert YYYY-MM-DD to DD-Mon-YYYY for consistency
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const parts = d.split('-');
+        d = parts[2] + '-' + months[parseInt(parts[1])-1] + '-' + parts[0];
+      }
+      invoiceDate = d;
+    }
+  } else {
+    invoiceDate = get(text, [
+      /Issuance Date\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      /Date of Issue:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      /Policy Issue Date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /Policy Issued on\s+(\d{1,2}-[A-Z]+-\d{4})/i,
+      /Policy Issued On\s*\n\s*:\s*\n([A-Za-z]{3,}\s+\d{1,2},\s*\d{4})/im,
+      /Receipt Date\s*(\d{2}[\/\-]\d{2}[\/\-]\d{4})/i,
+      /Invoice Date\s*\n(\d{1,2}-[A-Za-z]{3}-\d{4})/i,
+      /Invoice Date\s+(\d{1,2}-[A-Za-z]{3}-\d{4})/i,
+      /Invoice Date\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /GST Invoice Date\s*-\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /signed at .+? on this\s+(\d{1,2}-[A-Z]{3}-\d{2,4})/i,
+      /Date of Issue\s*\/\s*Invoice Date\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /Tax Invoice No\.\s*&\s*Date:\s*\S+\s*&\s*(\d{1,2}\s+\w+\s+\d{4})/i,
+      /Date\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      // Royal Sundaram: "Policy Issued Date : 23/02/2026"
+      /Policy Issued Date\s*[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      // Royal Sundaram GST Invoice: "Invoice Date : 23/02/2026"
+      /Invoice Date\s*[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    ]);
+  }
+
+  // ── EXPIRE DATE ──
+  const expireDate = get(text, [
+    /(\d{2}-[A-Za-z]{3}-\d{4})\s+23:59:59/i,
+    /To\s+Midnight\s+of\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+    /To\s+(\d{1,2}\s+\w{3},?\s+\d{4})\s+Midnight/i,
+    /Policy Expiry Date:\s*Midnight on\s+(\d{1,2}-[A-Z]+-\d{4})/i,
+    /To:(\d{1,2}-[A-Z]+-\d{4})\s*Midnight/i,
+    /To\s+(\d{1,2}-[A-Za-z]{3}-\d{4})/i,
+    /TO:\s*(\d{1,2}[\/]\d{1,2}[\/]\d{4})\s*\d{2}:\d{2}/i,
+    /to midnight of (\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    /to\s+(\d{2}\/\d{2}\/\d{4})\s+\(Midnight\)/i,
+    /to\s+Midnight\s+of\s+(\d{2}-\w{3}-\d{4})/i,
+    /to\s+(\d{2}-\d{2}-\d{4})\s+Midnight/i,
+    /to\s+(\d{2}-[A-Za-z]+-\d{4})\s+Midnight/i,
+    /To\s*:\s*(\d{2}-[A-Z]+-\d{4})\s*Midnight/i,
+    /Midnight\s+of\s+([A-Za-z]{3,}\s+\d{1,2},\s*\d{4})/i,
+    /Invoice No\.\s*IA\d+\s*\n\d{2}-[A-Za-z]{3}-\d{4}\s*\n(\d{2}-[A-Za-z]{3}-\d{4})/im,
+    /to\s+(\d{2}\/\d{2}\/\d{4})\s+11:59/i,
+    /To:(\d{2}\/\d{2}\/\d{4})\s+23:59:59/i,
+    /(\d{2}\/\d{2}\/\d{4})\s+23:59:59/i,
+    // Royal Sundaram: "Valid Till (midnight of) : 24/02/2027"
+    /Valid Till\s*\([^)]+\)\s*[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+  ]);
+
+  // ── TYPE ──
+  const insType = get(text, [
+    /(Digit\s+Two-Wheeler\s+Liabilty\s+Only\s+Policy)/i,
+    /(Standalone Motor Own Damage Policy for Private car[^\n]{0,40})/i,
+    /(Two\s*Wheeler\s*Liability\s*Only\s*Policy)/i,
+    /(Motor\s*-\s*Two\s*Wheelers\s*-\s*PACKAGE\s*POLICY)/i,
+    /(Private Car Package Policy)/i,
+    /(Private Car Liability Only(?:\s+Policy)?)/i,
+    /(PRIVATE CAR PACKAGE POLICY)/i,
+    /(PRIVATE CAR LIABILITY ONLY)/i,
+    /(Two[\s\-]Wheeler[s]?\s+(?:PACKAGE|Package)\s*POLICY)/i,
+    /(Two-WheelerPackagePolicy)/i,
+    /(TWO-WHEELERPACKAGEPOLICY)/i,
+    /(Auto Secure[^\n]{0,40})/i,
+    /(Act Only Insurance Policy[^\n]{0,30})/i,
+    /(PRIVATE CAR\s*[\-–]?\s*(?:\d+\s+YEAR\s+)?OWN DAMAGE[^\n]{0,50})/i,
+    /(Liability Only Policy For Private Car)/i,
+    /(Motor (?:Protect|Secure) Private Car Package Policy)/i,
+    /(Digit Private Car Liability Only Policy)/i,
+    /(PRIVATE CAR-1 YEAR OWN DAMAGE[^\n]{0,60})/i,
+    /(Private Car Liability Policy)/i,
+  ]);
+
+  // ── REGISTRATION NO ──
+  let regNo = 'NOT FOUND';
+  if (company === 'Magma General Insurance') {
+    // "Vehicle Registration No. HR 26 DH 5603" - spaces between parts
+    const m = text.match(/Vehicle Registration No\.\s+([A-Z]{2}\s*\d{2}\s*[A-Z]{1,3}\s*\d{1,4})/i);
+    if (m) regNo = m[1].trim();
+    else {
+      // Page 2 table: "HR 26 DH 5603/\nGURGAON"
+      const m2 = text.match(/([A-Z]{2}\s+\d{2}\s+[A-Z]{2}\s+\d{4})\s*\/\s*\n/i);
+      if (m2) regNo = m2[1].trim();
+    }
+  } else {
+  regNo = get(text, [
+    /VEHICLE\s*NO\.[:\s]+([A-Z]{2}[\s\-]+\d{2}[\s\-]+[A-Z]{0,4}[\s\-]+\d{1,4})/i,
+    /Vehicle No\.\s*:\s*([A-Z0-9\s\-]+?)(?:\n|$)/im,
+    /Registration\s*\nNumber\s*\n([A-Z]{2}[\s0-9]+[A-Z\s0-9]{3,10}?)(?:\n)/im,
+    /Registration Number\s*([A-Z]{2}[\-\s]?\d{2}[\-\s]?[A-Z]{0,4}[\-\s]?\d{1,4})(?:\s|Chassis|$|\n)/i,
+    /Registration No\.\s*([A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{0,4}[\s\-]?\d{1,4})(?:\s|Mfg|$)/i,
+    /(?:Registration\s*No\.?|Vehicle\s*Registration\s*No\.?)\s*[:\s]+([A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{0,4}[\s\-]?\d{1,4})/i,
+    /Regn\.\s*Number\s*([A-Z0-9]+)/i,
+    /\d{1,2}\s*Registration No\s*([A-Z0-9\-]+)/i,
+    /Vehicle Registration No\.[A-Za-z\/\s\.]+\n([A-Z]{2}\d{2}[A-Z]{2}\d{4})/im,
+    /^([A-Z]{2}\d+[A-Z]\d{4})(?:[A-Z]{2}|-\w)/im,
+    /([A-Z]{2}-\d{2}-[A-Z]{2}-\d{4})/i,
+    /Registration\s*Num(?:ber)?\s*[:\s]+([A-Z]{2}[A-Z0-9]{4,10})/i,
+    /Registration\s*Number[:\s]+([A-Z]{2}[0-9A-Z]{4,10})/i,
+    /([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})\s+[A-Z]{2}\d+-/i,
+  ]);
+  } // end else for regNo
+
+  // ── MAKE & MODEL ──
+  let make = 'NOT FOUND', model = 'NOT FOUND';
+
+  if (company === 'HDFC ERGO General Insurance') {
+    // "Make RENAULT Policy No. ..." — stop before 2+ spaces or next label
+    const mk = text.match(/^Make\s+([A-Z][A-Za-z0-9\s&\-\.]+?)(?:\s{2,}|\s+Policy No\.|\n|Model)/im);
+    // "Model DUSTER-85 PS RXL DIESEL(1461 CC)" — stop at newline or next label
+    const md = text.match(/^Model\s+([A-Za-z0-9][A-Za-z0-9\s\-\.\(\)]+?)(?:\n|\s{3,}|Period|Registration|Cubic|Year|Engine|$)/im);
+    if (mk) make = mk[1].trim().replace(/\s+/g,' ');
+    if (md) model = md[1].trim().replace(/\s*\([^)]*CC[^)]*\)\s*$/i,'').replace(/\s+/g,' ').trim();
+  } else if (company === 'Go Digit General Insurance') {
+    // Make: "BAJAJ Model/Vehicle" or "MaAke BAJAJ" (PDF.js typo)
+    const mk = text.match(/([A-Z]{3,})\s+Model\/Vehicle/i) ||
+               text.match(/Ma[Aa]?ke\s+([A-Z]+)/i) ||
+               text.match(/Make\s+([A-Z]+)/i);
+    if (mk) make = (mk[1] || mk[1]).trim();
+    // Model: browser PDF.js splits header as "Variant (Sub-\nType)\nPLATINA/ALLOY WHEELS"
+    // pdfplumber: "Variant (Sub- PLATINA/ALLOY WHEELS" same line
+    const md = text.match(/Variant\s*\(Sub-\s*Type\)\s*\n([A-Za-z0-9\/\s]+)/i) ||
+               text.match(/Variant\s*\(Sub-\s*([A-Z][A-Z0-9\/]+)/i) ||
+               text.match(/\nType\)\s*\n([A-Za-z0-9\/\s]+)/i);
+    if (md) model = md[1].split('/')[0].trim();
+  } else if (company === 'National Insurance Company Ltd.') {
+    const mk = text.match(/बनावट\s*Make\s*([A-Z][A-Za-z\s]+?)(?:\n|मॉडल|Total|\d)/i);
+    const md = text.match(/मॉडल\s*Model\s*([A-Za-z0-9\s\-]+?)(?:\n|Variant|अिध|\d)/i);
+    if (mk) make = mk[1].trim();
+    if (md) model = md[1].trim();
+  } else if (company === 'SBI General Insurance') {
+    const sbiV = text.match(/\d+\n(Mahindra\s*(?:&amp;|&)\s*\n?Mahindra)[,\s]+([A-Za-z0-9&\s\-]+?)\n([A-Za-z]+)\n(?:Seating|Cubic)/im);
+    if (sbiV) { make = 'Mahindra & Mahindra'; model = (sbiV[2] + ' ' + sbiV[3]).replace(/\s+/g, ' ').trim(); }
+    else {
+      const sbiV2 = text.match(/\d+\n(Mahindra\s*(?:&amp;|&)\s*\n?Mahindra)[,\s]+([A-Za-z0-9&\s\-]+?)(?:\nSeating|\nCubic)/im);
+      if (sbiV2) { make = 'Mahindra & Mahindra'; model = sbiV2[2].replace(/\s+/g, ' ').trim(); }
+    }
+  } else if (company === 'Generali Central Insurance') {
+    const m = text.match(/Make and Model of vehicle insured\s+([A-Z]+)\s+([A-Za-z0-9\s\-]+?)(?:\n|\d)/i);
+    if (m) { make = m[1].trim(); model = m[2].trim(); }
+    else {
+      const m2 = text.match(/Make and Model of vehicle insured\s*([A-Z][A-Za-z0-9\s\-]+?)(?:\n\d|\d{2}Registration|\d{2}[A-Z])/i);
+      if (m2) { const p = m2[1].trim().split(/\s+/); make = p[0]; model = p.slice(1).join(' '); }
+    }
+  } else if (company === 'TATA AIG General Insurance') {
+    const m = text.match(/(?:Make\s*\/\s*Model\s*\/?\s*\n?Variant\s*\n?)([A-Z]+)\s*\/\s*([A-Za-z0-9\s\-]+?)\s*\/\s*([A-Za-z0-9\s\-]+?)(?:\n|$)/im);
+    if (m) { make = m[1].trim(); model = m[2].trim(); }
+  } else if (company === 'ICICI Lombard General Insurance') {
+
+    // ===============================
+    // METHOD 1: Risk Assumption Letter (Page 1) - Most Reliable
+    // ===============================
+    const cleanLine = text.match(/Vehicle Make\s*\/\s*Model\s*\n?\s*([A-Za-z\s]+?)\s*\/\s*([A-Za-z0-9\s\.]+?)(?:\n|RTO|Vehicle)/i);
+
+    if (cleanLine) {
+      make = cleanLine[1].trim().replace(/\s+/g,' ');
+      model = cleanLine[2].trim().replace(/\s+/g,' ');
+    }
+
+    // ===============================
+    // METHOD 2: Table Format (Page 3)
+    // ===============================
+    if (make === 'NOT FOUND') {
+      const tableLine = text.match(
+        /[A-Z]{2}\d{2}[A-Z]{2}\d{4}\s+([A-Za-z\s]+?)\s+([A-Za-z0-9\s\.]+?)\s+(?:SUV|Sedan|Hatchback|MUV|Truck)/i
+      );
+
+      if (tableLine) {
+        make = tableLine[1].trim().replace(/\s+/g,' ');
+        model = tableLine[2].trim().replace(/\s+/g,' ');
+      }
+    }
+
+    // ===============================
+    // FINAL CLEANUP
+    // ===============================
+    if (make !== 'NOT FOUND') {
+      make = make.toUpperCase();
+    }
+
+    if (model !== 'NOT FOUND') {
+      model = model.toUpperCase();
+    }
+  } else if (company === 'United India Insurance Co. Ltd.') {
+    const m = text.match(/([A-Z]+(?:\s*&\s*\n?[A-Z]+)?)\s*\/\s*\n?([A-Za-z0-9\s\(\)\-\.]+?)\s+(?:Saloon|null|\d\.\d)/i);
+    if (m) { make = m[1].replace(/\s+/g, ' ').trim(); model = m[2].replace(/\s+/g, ' ').trim(); }
+  } else if (company === 'Magma General Insurance') {
+    // Page 1 Risk Assumption Letter has clean single-line: "Vehicle Make/Model TOYOTA / INNOVA CRYSTA 2.4 V 7 STR"
+    // followed by "RTO" on next line - most reliable source
+    const mkM = text.match(/Vehicle Make\/Model\s+([A-Z][A-Z\s&]+?)\s*\/\s*([A-Za-z0-9][A-Za-z0-9\s\.\/]+?)\s*\n/i);
+    if (mkM) {
+      make = mkM[1].trim();
+      model = mkM[2].trim();
+    } else {
+      // Fallback: table on page 2 "TOYOTA/ INNOVA\nCRYSTA 2.4 V 7\nSTR" - join next 2 lines
+      const m2 = text.match(/([A-Z][A-Z\s&]+?)\/\s*([A-Za-z0-9][A-Za-z0-9\s]+?)\n([A-Za-z0-9\s]+?)\n([A-Za-z0-9]{2,15})\s*\n/i);
+      if (m2) { make = m2[1].trim(); model = (m2[2]+' '+m2[3]+' '+m2[4]).replace(/\s+/g,' ').trim(); }
+    }
+  } else if (company === 'Bajaj General Insurance') {
+
+    // ===============================
+    // TWO-WHEELER FIX (ROBUST)
+    // ===============================
+
+    // Extract row using Registration + Month pattern
+    const twRow = text.match(
+      /[A-Z0-9]{6,12}\s+[A-Z]{3}\/\d{4}\s+([A-Z]+)\s+([A-Z0-9\s]+?)\s+\d{2,4}\s+(?:Petrol|Diesel|Electric|CNG)/i
+    );
+
+    if (twRow) {
+      make = twRow[1].trim();
+      model = twRow[2].trim().replace(/\s+/g, ' ');
+    }
+
+    // ===============================
+    // CAR FIX (MULTI-LINE SAFE)
+    // ===============================
+
+    if (make === 'NOT FOUND') {
+      const makeMatch = text.match(/Make\s*&?\s*Model\s*\n?\s*([A-Z\s]+?)(?:\n|Sub|Engine|Chassis)/i);
+      if (makeMatch) {
+        make = makeMatch[1].trim().replace(/\s+/g, ' ');
+      }
+
+      // Special case Mahindra
+      if (/MAHINDRA\s+AND/i.test(text)) {
+        make = 'MAHINDRA AND MAHINDRA';
+      }
+    }
+
+    if (model === 'NOT FOUND') {
+
+      // Capture model lines after make
+      const modelMatch = text.match(
+        /(SCORPIO[\sA-Z0-9]+?)(?:\n|Engine|Chassis|CC|\d{3,4})/i
+      );
+
+      if (modelMatch) {
+        model = modelMatch[1].trim().replace(/\s+/g, ' ');
+      }
+
+      // Generic fallback for any brand
+      if (model === 'NOT FOUND') {
+        const genericModel = text.match(
+          /[A-Z]{2}-\d{2}-[A-Z]{2}-\d{4}\s+([A-Z][A-Z0-9\s]+?)\s+\d{3,4}/i
+        );
+        if (genericModel) {
+          model = genericModel[1].trim().replace(/\s+/g, ' ');
+        }
+      }
+    }
+  } else if (company === 'New India Assurance Co. Ltd.') {
+    // Single line: "Make / Model HYUNDAI/i20 Variant: ASTA 1.4 CRDI"
+    const niaMM1 = text.match(/Make\s*\/\s*Model\s+([A-Za-z][A-Za-z\s&]*?)\/([A-Za-z0-9][A-Za-z0-9\s\-\.]*?)(?:\s+Variant|\s{2,}|\n)/i);
+    if (niaMM1) { make = niaMM1[1].trim().toUpperCase(); model = niaMM1[2].trim(); }
+    // Multi-line PDF.js: "Make / Model\nHYUNDAI/i20"
+    if (make === 'NOT FOUND') {
+      const niaMM2 = text.match(/Make\s*\/\s*Model\s*\n([A-Za-z][A-Za-z\s&]*?)\/([A-Za-z0-9][A-Za-z0-9\s\-\.]*?)(?:\s+Variant|\n|$)/i);
+      if (niaMM2) { make = niaMM2[1].trim().toUpperCase(); model = niaMM2[2].trim(); }
+    }
+    // Multi-line PDF.js: "Make / Model\nHYUNDAI\ni20"
+    if (make === 'NOT FOUND') {
+      const niaMM3 = text.match(/Make\s*\/\s*Model\s*\n([A-Za-z][A-Za-z\s&]+)\n([A-Za-z0-9][A-Za-z0-9\s\-\.]+?)(?:\s+Variant|\n|$)/i);
+      if (niaMM3) { make = niaMM3[1].trim().toUpperCase(); model = niaMM3[2].trim(); }
+    }
+  } else if (company === 'Reliance General Insurance') {
+    // "Make / Model & Variant TATA NEXON 1.2 XZA PLUS CC / HP 1198"
+    // Make = first ALL-CAPS word(s), Model = rest before "CC /" or newline
+    const relM = text.match(/Make\s*\/\s*Model\s*&\s*Variant[\s\n]+([A-Z]+)\s+([A-Za-z0-9][A-Za-z0-9\s\.]+?)(?:\s+CC\s*\/|\s+Engine|\n|$)/im);
+    if (relM) { make = relM[1].trim(); model = relM[2].trim(); }
+  } else if (company === 'Royal Sundaram General Insurance') {
+    // "Vehicle Make/Model : VOLKSWAGEN/ POLO Highline Plus 1.5 Diesel"
+    const m = text.match(/Vehicle Make\/Model\s*[:\s]+([A-Z]+)\s*\/\s*([A-Za-z0-9\s\-\.]+?)(?:\n|Fuel|$)/i);
+    if (m) { make = m[1].trim(); model = m[2].trim(); }
+    else {
+      // "Make of the Vehicle VOLKSWAGEN  Model Description POLO Highline Plus 1.5 Diesel"
+      const m2 = text.match(/Make of the Vehicle\s+([A-Z]+)\s+Model Description\s+([A-Za-z0-9\s\-\.]+?)(?:\n|Engine|$)/i);
+      if (m2) { make = m2[1].trim(); model = m2[2].trim(); }
+    }
+  } else {
+    const m = text.match(/Make\s*\/\s*Model\s*([A-Z][A-Za-z\s&]+?)\s*\/\s*([A-Za-z0-9\s\-\.]+?)(?:\n|Variant|CC|\d{4})/i);
+    if (m) { make = m[1].trim(); model = m[2].trim(); }
+  }
+
+  // ── UNIVERSAL MAKE/MODEL FALLBACK ──
+  if (make === 'NOT FOUND' || model === 'NOT FOUND') {
+    const cleaned = text.replace(/\r/g, '');
+    const labelMatch = cleaned.match(/Make\s*\/?\s*Model(?:\s*\/?\s*Variant)?/i);
+
+    if (labelMatch) {
+      const after = cleaned.substring(labelMatch.index + labelMatch[0].length);
+      const snippet = after.substring(0, 200)
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const parts = snippet.split('/').map(p => p.trim()).filter(Boolean);
+
+      if (parts.length >= 2) {
+        make = parts[0].toUpperCase();
+        model = parts.slice(1).join(' / ').toUpperCase();
+      }
+    }
+  }
+
+  // ── OWNER ──
+  const ownerName = get(text, [
+    /Email ID\s*:[^\n]+\n((?:Mr|Mrs|Ms)\.?\s+[A-Za-z\s]+?)\nCommunication Address/i,
+    /Name of the Insured\s+((?:MR|MRS|MS)\.?\s+[A-Z][A-Z\s]+?)(?:\n|\s{2,}|Address|$)/i,
+    /^Insured\s*((?:Mr|Mrs|Ms)\.?\s+[A-Z][A-Za-z\s]+?)\s*\nAddress/im,
+    /Insured Name\s*([A-Za-z][A-Za-z\s]+?)\s*(?:Policy Number|Customer ID|\n)/i,
+    /Name of the Insured\s*\n?\s*:\s*\n?\s*((?:MR|MRS|MS)\.?\s+[A-Z][A-Za-z\s]+?)(?:Policy No|$)/i,
+    /Insured Name\s*:\s*((?:Mr|Mrs|Ms)\.?\s+[A-Z][A-Za-z\s]+?)\s+Period/i,
+    /Dear\s+(?:Mr\.?|MR\.?)([A-Z][A-Za-z\s]+?)(?:,|\n)/i,
+    /^Name\s+([A-Z][A-Z\s]+?)\s+Vehicle/im,
+    /Name\s*\(Registered owner[^)]+\)\s*:\s*((?:Mr\.?\s+)?[A-Z][A-Za-z\s]+?)(?:\n)/i,
+    /Customer Name:\s*([A-Z][A-Za-z\s]+?)(?:\s+ाहक|Customer ID|\n)/i,
+    /(?:Name of (?:the )?Insured(?:\/Proposer)?|Insured Name)\s*[:\-]?\s*((?:Mr\.?|Mrs\.?|MR\.?|MRS\.?|MS\.?)\s*[A-Z][A-Za-z\s]+?)(?:\n|Address|Period|,|\d)/i,
+    /^Name\s*\n([A-Z][A-Z\s]+?)\n(?:Vehicle Registration|Address)/im,
+    /Payer Name:\s*([A-Z][A-Za-z\s]+?)(?:\n)/i,
+    // Royal Sundaram: "Insured Name : Mr DARSHAN SINGH ."
+    /Insured Name\s*:\s*((?:Mr|Mrs|Ms)\.?\s+[A-Z][A-Za-z\s]+?)(?:\.|\n|$)/i,
+  ]);
+
+  // ── PHONE ──
+  const phone = get(text, [
+    /Telephone\s*\([^)]+\)\s*[:\s]+([\d*]{10,12})/i,
+    /Contact\s*No\.?\s*\+91\s*([\d*]{8,10})/i,
+    /CONTACT NUMBER\s*[:\s]+(\*+\d{4,})/i,
+    /(?:Mobile\s*No\.?\s*[\-]+|Proposer Mobile Number\s*[:\s]+)(\*+\d{4,})/i,
+    /\bMobile\s*\n\s*([x*]+\d{4,})/i,
+    /Contact\s*Number\s*\/[^\/]*\/\s*([Xx*]+\d{4,})/i,
+    /Mobile\s*No\.?\s*[\-:\s]+([\d*x]{8,12})/i,
+    /(?:Proposer\s+)?Mobile Number\s*[:\s]*([\d*x]{8,12})/i,
+    /PHONE\s*NUMBER:\s*\/\s*\/\s*((?:9|8|7|6)\d{9})/i,
+    /Proposer Contact Number\s+((?:9|8|7|6)\d{9})/i,
+    /Mobile:\s*((?:9|8|7|6)\d{9})/i,
+    /Contact Number\s+((?:9|8|7|6)\d{9})/i,
+    /\bMobile\s*No\.?\s*[:\s]+((?:9|8|7|6)\d{9})\b/i,
+    /(?:Contact\s*No\.?|Mobile|Phone|Tel\.?)\s*[:\-]?\s*(?:\+91\s*)?((?:9|8|7|6)\d{9})\b/i,
+    /\b((?:9[0-9]|8[0-9]|7[0-9]|6[0-9])\d{8})\b/,
+  ]);
+
+  // ── EMAIL ──
+  // NIA format: "Email GANESHINSURANCE2023\n@GMAIL.COM" — @ on next line
+  // Only match if result is NOT a company/branch domain
+  const INSURER_EMAIL_DOMAIN = /\.(newindia\.co\.in|tataaig\.com|hdfcergo\.com|bajajallianz\.com|icicilombard\.com|reliancegeneral\.in|sbigeneral\.in|uiic\.co\.in|iffcotokio\.com|cholainsurance\.com|irdai\.gov|godigit\.in|acko\.com)$/i;
+  const _splitAlt = text.match(/\bEmail\s+([A-Z0-9._%+\-]+)\s*\n\s*(@[A-Z0-9.\-]+\.[A-Z]{2,})/i);
+  const splitEmailAlt = _splitAlt && !INSURER_EMAIL_DOMAIN.test(_splitAlt[1] + _splitAlt[2]) ? _splitAlt : null;
+  // Standard split: "Email user@\ndomain.com"
+  const _splitM = splitEmailAlt ? null : text.match(/Email\s+([A-Z0-9._%+\-]+@)\s*\n\s*([A-Z0-9.\-]+\.[A-Z]{2,})/i);
+  const splitEmailM = _splitM && !INSURER_EMAIL_DOMAIN.test(_splitM[1] + _splitM[2]) ? _splitM : null;
+  const email = splitEmailAlt ? (splitEmailAlt[1] + splitEmailAlt[2]) :
+    splitEmailM ? (splitEmailM[1] + splitEmailM[2]) : get(text, [
+    /Email\s*ID\s*[:\-]?\s*([A-Z0-9*._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i,
+    /ई-मेल\s*E-Mail:\s*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+    /([A-Z*][A-Z0-9*_%\-]*@GMAIL\.COM)(?=E-)/i,
+    /\n([a-zA-Z0-9._%+\-]+@gmail\.com)\n/i,
+    /([a-z*][a-zA-Z0-9.*x_+\-]*@(?:gmail|yahoo|hotmail|outlook)\.[a-zA-Z*]{2,})/,
+    /E-?mail[\s\-]?(?:ID?|Address|Id)?\s*[:\s]*([a-zA-Z0-9*x][a-zA-Z0-9.*x_%+\-]*@[a-zA-Z0-9.*x\-]+(?:\.[a-zA-Z*x]{2,})?)/i,
+    /([a-zA-Z0-9._%+\-]+@(?:gmail|yahoo|hotmail|outlook)\.[a-zA-Z]{2,})/i,
+    /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+  ]);
+
+  // ── NET PREMIUM ──
+  const netPremium = get(text, [
+    /\(A\)\s*\+\s*\(B\)\s*([\d,]+(?:\.\d+)?)/i,
+    /Premium:\s*([\d,]+(?:\.\d+)?)/i,   
+    /Premium\s*₹\s*([\d,]+(?:\.\d+)?)/i,
+    /Premium\(A\+B\)\s*([\d,]+(?:\.\d+)?)/i,
+    /Net Premium in Rs\s+([\d,]+(?:\.\d+)?)/i,
+    /Net Liability Premium\s+([\d,]+(?:\.\d+)?)/i,
+    /Basic TP Premium\s+([\d,]+(?:\.\d+)?)/i,
+    /Net OD Premium\s+([\d,]+(?:\.\d+)?)/i,
+    /Net\s*Premium\s*\(A\)\s*(?:₹|`)?\s*([\d,]+(?:\.\d+)?)/i,
+    /Net\s*Premium\s*\(B\)\s*(?:₹|`)?\s*([\d,]+(?:\.\d+)?)/i,
+    /^Net Premium\s+([\d,]+(?:\.\d+)?)$/im,
+    /TOTAL\s*TP\s*PREMIUM\s*([\d,]+(?:\.\d+)?)/i,
+    /Total Premium \(Net Premium\) \(A\+B\)\s*([\d,]+(?:\.\d+)?)/i,
+    /TOTAL PACKAGE PREMIUM[^0-9]+([\d,]+(?:\.\d+)?)/i,
+    /Total Annual Premium \(A\+B\)\s*([\d,]+(?:\.\d+)?)/i,
+    /Total Liability Premium\s*([\d,]+(?:\.\d+)?)/i,
+    /IA\d{9}\d{4}-\d{2}-\d{2}(\d{3,5}\.\d{2})/i,
+    // Go Digit: "Net Premium (`)\n3796.00" or "Net Premium  3796.00"
+    /Net Premium\s*(?:\([`₹]\))?\s*([\d,]+(?:\.\d+)?)/i,
+    // Go Digit ENDORSEMENT row: "IA240936425 2026-02-23 3796.00 683.28 ..."
+    /IA\d+\s+\d{4}-\d{2}-\d{2}\s+([\d]+(?:\.\d+)?)\s+[\d]+(?:\.\d+)?\s+0\.00/i,
+    // Royal Sundaram: "NET PREMIUM (A + B) 14759" or "Taxable Premium 14759"
+    /NET PREMIUM\s*\([^)]+\)\s*([\d,]+(?:\.\d+)?)/i,
+    /Taxable Premium\s+([\d,]+(?:\.\d+)?)/i,
+  ]);
+
+  // ── TOTAL PREMIUM ──
+  const totalPremium = get(text, [
+    /Total Payable in Rs\s+([\d,]+(?:\.\d+)?)/i,
+    /FINAL PREMIUM\s+([\d,]+(?:\.\d+)?)/i,
+    /Final Premium\s*\([^)]+\)\s*([\d,]+(?:\.\d+)?)/i,
+    /^Final Premium\s+([\d,]+(?:\.\d+)?)$/im,
+    /Total Policy Premium\s*(?:₹|`)?\s*([\d,]+(?:\.\d+)?)/i,
+    /Policy premium including Tax\s+([\d,]+(?:\.\d+)?)/i,
+    /Total Premium\s*\(rounded off\)\s*([\d,]+(?:\.\d+)?)/i,
+    /TOTAL PREMIUM PAYABLE\s*\([`₹]\)\s*([\d,]+(?:\.\d+)?)/i,
+    // Go Digit: "Final Premium (`) 4479.28"
+    /Final Premium\s*(?:\([`₹]\))?\s*([\d,]+(?:\.\d+)?)/i,
+    // Go Digit ENDORSEMENT row: last number is gross premium
+    /IA\d+\s+\d{4}-\d{2}-\d{2}\s+[\d.]+\s+[\d.]+\s+0\.00\s+0\.00\s+0\.00\s+0\.00\s+([\d]+(?:\.\d+)?)/i,
+    /Total\s*\(Rounded Off\)\s*:\s*([\d,]+(?:\.\d+)?)/i,
+    /Total\s*\(Rounded to the nearest rupee\)\s*([\d,]+(?:\.\d+)?)/i,
+    /Total Premium Payable In\s*[`₹]\s*([\d,]+(?:\.\d+)?)/i,
+    /TOTAL\s+([\d,]+(?:\.\d+)?)\s*Disclaimer/i,
+    /Total Amount\s*₹?\s*([\d,]+(?:\.\d+)?)/i,
+    /(?:TOTAL|Total)\s*(?:PAYABLE\s*)?PREMIUM\s*[:\-]?\s*(?:₹|Rs\.?|`)?\s*([\d,]+(?:\.\d+)?)/i,
+    /Gross Premium\s*([\d,]+(?:\.\d+)?)/i,
+    // Royal Sundaram: "TOTAL PREMIUM PAYABLE 17415.62"
+    /TOTAL PREMIUM PAYABLE\s+([\d,]+(?:\.\d+)?)/i,
+    // Royal Sundaram GST Invoice: "Gross Premium 17415.62"  
+    /Gross Premium\s+(\d[\d,]+(?:\.\d+)?)/i,
+    // Royal Sundaram: "Premium Amount (Rs.) 17415.62"
+    /Premium Amount\s*\(Rs\.\)\s+([\d,]+(?:\.\d+)?)/i,
+  ]);
+
+  return fillMissing({
+    'COMPANY NAME': company,
+    'POLICY NO': policyNo,
+    'AGENT NAME': agentName,
+    'POLICY INVOICE DATE': invoiceDate,
+    'POLICY EXPIRE DATE': expireDate,
+    'TYPE OF INSURANCE': insType,
+    'REGISTRATION NO': regNo,
+    'MAKE': make,
+    'MODEL': model,
+    'OWNER NAME': ownerName,
+    'PHONE NO': phone,
+    'MAIL ID': email,
+    'NET PREMIUM': netPremium,
+    'TOTAL PREMIUM': totalPremium,
+  }, text);
+}
+
+// ─── UNIVERSAL FALLBACK ──────────────────────────────────────
+function fillMissing(data, text) {
+
+  // POLICY NO
+  if (data['POLICY NO'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Policy|Certificate)\s*(?:No\.?|Number|#)\s*[:\.\s]+([\w\/\-]{6,40})(?:\n|\s{3}|Period|Valid|From|To|$)/i,
+      /\bPolicy\s*No\.?\s*[:\-]?\s*([\w\/\-]{6,40})/i,
+      /Policy\s*\/\s*Certificate\s*No\.?\s*[:\-]?\s*([\w\/\-]{6,40})/i,
+      /PolicyNumber[:\s]+([\w\/\-]{6,40})/i,
+    ]);
+    if (m !== 'NOT FOUND') data['POLICY NO'] = m;
+  }
+
+  // AGENT NAME
+  if (data['AGENT NAME'] === 'NOT FOUND') {
+    const v = getAfterLabel(text,
+      ['Broker Name','Intermediary Name','Agency Name','Agent Name','Insurance Advisor',
+       'Channel Partner','Issuing Agent','Partner Name','Servicing Agent','SP Name','IMD Name',
+       'Broker / Agent Name','Agent / Intermediary Name'],
+      /([A-Za-z][A-Za-z\s&\.,]+?)(?:\n|Code|ID|Email|$)/
+    );
+    if (v !== 'NOT FOUND') data['AGENT NAME'] = v;
+  }
+
+  // INVOICE DATE
+  if (data['POLICY INVOICE DATE'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Policy\s*)?(?:Issue|Issuance|Invoice)\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      /(?:Policy\s*)?(?:Issue|Issuance|Invoice)\s*Date\s*[:\-]?\s*(\d{1,2}[\-][A-Za-z]{3}[\-]\d{4})/i,
+      /Date\s*of\s*Issue\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Policy\s*)?Issued\s*(?:On|Date)\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Policy\s*)?Issued\s*(?:On|Date)\s*[:\-]?\s*(\d{1,2}[\-][A-Za-z]{3}[\-]\d{4})/i,
+      /(?:GST\s*)?Invoice\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Policy\s*)?Issuance\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Receipt|Transaction)\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /Commencement\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    ]);
+    if (m !== 'NOT FOUND') data['POLICY INVOICE DATE'] = m;
+  }
+
+  // EXPIRE DATE
+  if (data['POLICY EXPIRE DATE'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Policy\s*)?(?:Expiry|Expire)\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Policy\s*)?(?:Expiry|Expire)\s*Date\s*[:\-]?\s*(\d{1,2}[\-][A-Za-z]{3}[\-]\d{4})/i,
+      /Valid\s*(?:Upto?|Till)\s*(?:\([^)]*\))?\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /(?:Policy\s*)?End\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+      /To\s*(?:Date\s*)?[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s*(?:\d{2}:\d{2}|Midnight|$)/i,
+      /Cover\s*(?:End|Expiry)\s*Date\s*[:\-]?\s*(\d{1,2}[\-][A-Za-z]{3}[\-]\d{4})/i,
+      /(?:Policy\s*)?Expiry\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    ]);
+    if (m !== 'NOT FOUND') data['POLICY EXPIRE DATE'] = m;
+  }
+
+  // REGISTRATION NO
+  if (data['REGISTRATION NO'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Registration|Reg)\s*(?:No\.?|Number)\s*[:\-]?\s*([A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{1,3}[\s\-]?\d{1,4})/i,
+      /Vehicle\s*(?:No\.?|Number|Reg\.?)\s*[:\-]?\s*([A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{1,3}[\s\-]?\d{1,4})/i,
+      /Regn\.?\s*(?:No\.?|Number)\s*[:\-]?\s*([A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{1,3}[\s\-]?\d{1,4})/i,
+      /\b([A-Z]{2}[\-]\d{2}[\-][A-Z]{1,3}[\-]\d{1,4})\b/,
+      /\b([A-Z]{2}\d{2}[A-Z]{1,3}\d{4})\b/,
+    ]);
+    if (m !== 'NOT FOUND') data['REGISTRATION NO'] = m;
+  }
+
+  // MAKE
+  if (data['MAKE'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Vehicle\s*)?Make\s*[:\-\/]?\s*([A-Z][A-Za-z\s&]+?)(?:\n|[\/,]|Model|Variant|Engine|$)/im,
+      /Manufacturer\s*[:\-]?\s*([A-Z][A-Za-z\s]+?)(?:\n|Model|\/|$)/im,
+    ]);
+    if (m !== 'NOT FOUND') data['MAKE'] = m.trim();
+  }
+
+  // MODEL
+  if (data['MODEL'] === 'NOT FOUND') {
+    const m = get(text, [
+      /Model(?:\s*Description)?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\s\-\.\/]+?)(?:\n|Variant|Engine|CC|Fuel|Mfg|$)/im,
+      /Make\s*[\/&]\s*Model\s*[:\-]?\s*(?:[A-Z\s]+?\s*[\/&]\s*)([A-Za-z0-9][A-Za-z0-9\s\-\.]+?)(?:\n|Variant|$)/im,
+    ]);
+    if (m !== 'NOT FOUND') data['MODEL'] = m.trim();
+  }
+
+  // OWNER NAME
+  if (data['OWNER NAME'] === 'NOT FOUND') {
+    let v = getAfterLabel(text,
+      ['Name of the Insured','Insured Name','Name of Insured','Policyholder Name',
+       'Proposer Name','Customer Name','Name of Assured','Policy Holder',
+       'Assured Name','Name of Policyholder'],
+      /((?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Shri|Smt\.?)\s*[A-Z][A-Za-z\s\.]{2,50}?)(?:\n|Address|Phone|Mobile|Policy|$)/
+    );
+    if (v === 'NOT FOUND') {
+      v = getAfterLabel(text,
+        ['Name of the Insured','Insured Name','Name of Insured','Policyholder Name','Customer Name'],
+        /([A-Z][A-Z\s]{4,50})(?:\n|Address|$)/
+      );
+    }
+    if (v !== 'NOT FOUND') data['OWNER NAME'] = v;
+  }
+
+  // PHONE NO
+  if (data['PHONE NO'] === 'NOT FOUND') {
+    const m = get(text, [
+      /(?:Mobile|Phone|Tel(?:ephone)?|Contact)\s*(?:No\.?|Number)?\s*[:\-]?\s*(?:\+91[\s\-]?)?((?:9|8|7|6)\d{9})\b/i,
+      /\+91[\s\-]?((?:9|8|7|6)\d{9})\b/,
+      /\b((?:9|8|7|6)\d{9})\b/,
+    ]);
+    if (m !== 'NOT FOUND') data['PHONE NO'] = m;
+  }
+
+  // MAIL ID
+  if (data['MAIL ID'] === 'NOT FOUND') {
+    // Fix: rejoin lines broken mid-email (e.g. "abc@gm\nail.com" → "abc@gmail.com")
+    const emailText = text.replace(/([a-zA-Z0-9._%+\-]+)\n([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g, '$1$2');
+    const m = get(emailText, [
+      /E[\-\s]?[Mm]ail\s*(?:ID|Id|Address)?\s*[:\-]?\s*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+      /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+    ]);
+    if (m !== 'NOT FOUND') data['MAIL ID'] = m;
+  }
+
+  // NET PREMIUM
+  if (data['NET PREMIUM'] === 'NOT FOUND') {
+    const m = get(text, [
+      /Net\s*(?:Annual\s*)?Premium\s*(?:\([^)]*\))?\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Premium\s*(?:before|excl(?:uding)?\.?)\s*(?:Tax|GST)\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Total\s*(?:Basic\s*)?Premium\s*(?:\([^)]*\))?\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Taxable\s*(?:Value|Premium|Amount)\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /^Net\s*Premium\s+([\d,]+(?:\.\d+)?)$/im,
+    ]);
+    if (m !== 'NOT FOUND') data['NET PREMIUM'] = m;
+  }
+
+  // TOTAL PREMIUM
+  if (data['TOTAL PREMIUM'] === 'NOT FOUND') {
+    const m = get(text, [
+      /Total\s*(?:Amount\s*)?Payable\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Total\s*(?:Policy\s*)?Premium\s*[Ii]ncl(?:uding)?\.?\s*(?:Tax|GST)\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Amount\s*Payable\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /(?:Total|Final|Gross)\s*Premium\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Premium\s*Amount\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+      /Grand\s*Total\s*[₹`]?\s*([\d,]+(?:\.\d+)?)/i,
+    ]);
+    if (m !== 'NOT FOUND') data['TOTAL PREMIUM'] = m;
+  }
+
+  // TYPE OF INSURANCE
+  if (data['TYPE OF INSURANCE'] === 'NOT FOUND') {
+    const m = get(text, [
+      /((?:Private\s*Car|Two[\s\-]Wheeler|Commercial\s*Vehicle)\s*(?:Package|Comprehensive|Liability|Third\s*Party|Own\s*Damage)\s*(?:Policy)?)/i,
+      /((?:Comprehensive|Third\s*Party\s*(?:Liability)?|Own\s*Damage)\s*(?:Motor\s*)?(?:Insurance\s*)?(?:Policy)?)/i,
+      /(?:Type\s*of\s*(?:Policy|Insurance|Cover))\s*[:\-]?\s*([A-Za-z\s]+?(?:Package|Comprehensive|Liability|Third Party|Own Damage)[A-Za-z\s]*?)(?:\n|$)/im,
+    ]);
+    if (m !== 'NOT FOUND') data['TYPE OF INSURANCE'] = m;
+  }
+
+  return data;
+}
+
+// ─── TABLE ───────────────────────────────────────────────────
+function addRow(data, isFromExcel = false) {
+  const id = Date.now() + Math.random();
+  rows.push({ id, data });
+
+  const tbody = document.getElementById('tableBody');
+  const emptyRow = document.getElementById('emptyRow');
+  if (emptyRow) emptyRow.remove();
+
+  const tr = document.createElement('tr');
+  tr.id = 'row-' + id;
+  if (!isFromExcel) tr.classList.add('new-row');
+
+  // SR
+  const tdSr = document.createElement('td');
+  tdSr.style.cssText = 'color:var(--muted);font-family:Space Mono,monospace;font-size:10px;width:36px;text-align:center;';
+  tdSr.textContent = rows.length;
+  tr.appendChild(tdSr);
+  // PDF NAME column
+  const tdPdf = document.createElement('td');
+  tdPdf.textContent = data['PDF NAME'] || '';
+  tdPdf.style.whiteSpace = 'nowrap';
+  tdPdf.style.maxWidth = '200px';
+  tdPdf.style.overflow = 'hidden';
+  tdPdf.style.textOverflow = 'ellipsis';
+  tdPdf.style.fontSize = '11px';
+  tdPdf.title = data['PDF NAME'] || '';
+  tr.appendChild(tdPdf);
+
+  FIELDS.forEach(field => {
+    const td = document.createElement('td');
+    const val = data[field] || 'NOT FOUND';
+    td.contentEditable = 'true';
+    td.setAttribute('data-field', field);
+    td.setAttribute('data-id', id);
+    if (val === 'NOT FOUND') td.classList.add('not-found');
+    td.textContent = val;
+    td.addEventListener('input', () => {
+      td.classList.remove('not-found');
+      const row = rows.find(r => r.id == id);
+      if (row) row.data[field] = td.textContent.trim();
+    });
+    tr.appendChild(td);
+  });
+
+  // Delete button
+  const tdDel = document.createElement('td');
+  tdDel.style.textAlign = 'center';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-btn';
+  delBtn.textContent = '✕';
+  delBtn.title = 'Delete row';
+  delBtn.onclick = () => {
+    rows = rows.filter(r => r.id != id);
+    tr.remove();
+    reNumber();
+    if (rows.length === 0) showEmpty();
+  };
+  tdDel.appendChild(delBtn);
+  tr.appendChild(tdDel);
+
+  tbody.appendChild(tr);
+}
+
+function reNumber() {
+  document.querySelectorAll('#tableBody tr').forEach((tr, i) => {
+    const td = tr.cells[0];
+    if (td) td.textContent = i + 1;
+  });
+}
+
+function showEmpty() {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '<tr id="emptyRow"><td colspan="17" id="emptyState">No data yet — load a PDF or existing Excel file</td></tr>';
+}
+
+// ─── EXCEL LOAD ───────────────────────────────────────────────
+function loadExistingExcel() {
+  document.getElementById('excelInput').click();
+}
+
+function handleExcelLoad(input) {
+  const f = input.files[0];
+  if (!f) return;
+  excelFileName = f.name;
+  document.getElementById('excelLoadedName').textContent = '📊 ' + f.name;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    // Find header row that has policy no etc
+    let dataRows = json;
+    // Try to map columns
+    const colMap = {
+      'COMPANY NAME': ['COMPANY NAME','company name'],
+      'POLICY NO': ['POLICY NO','policy no'],
+      'AGENT NAME': ['AGENT NAME','agent name'],
+      'POLICY INVOICE DATE': ['POLICY INVOICE DATE','POLICY INVOIC  DATE','invoice date'],
+      'POLICY EXPIRE DATE': ['POLICY EXPIRE DATE','expire date'],
+      'TYPE OF INSURANCE': ['TYPE OF INSURANCE','type of insurance'],
+      'REGISTRATION NO': ['REGISTRATION NO','REGISTRATION  NO','reg no'],
+      'MAKE': ['MAKE','make'],
+      'MODEL': ['MODEL','model'],
+      'OWNER NAME': ['OWNER NAME','owner name'],
+      'PHONE NO': ['PHONE NO','phone no'],
+      'MAIL ID': ['MAIL ID','mail id'],
+      'NET PREMIUM': ['NET PREMIUM','NET PRIMUM','net premium'],
+      'TOTAL PREMIUM': ['TOTAL PREMIUM','TOTOAL PRIMUM','total premium'],
+    };
+
+    // skip header rows that don't have data
+    for (const jsonRow of dataRows) {
+      const keys = Object.keys(jsonRow);
+      const data = {};
+      let hasData = false;
+      FIELDS.forEach(field => {
+        const variants = colMap[field] || [field];
+        const matchKey = keys.find(k => variants.some(v => k.toUpperCase().trim() === v.toUpperCase().trim()));
+        const val = matchKey ? (jsonRow[matchKey] || '').toString().trim() : 'NOT FOUND';
+        data[field] = val || 'NOT FOUND';
+        if (val && val !== 'NOT FOUND') hasData = true;
+      });
+      data['PDF NAME'] = 'FROM EXCEL';
+      if (!hasData) continue;
+
+      const norm = normPolicy(data['POLICY NO']);
+      if (data['POLICY NO'] && data['POLICY NO'] !== 'NOT FOUND') {
+        existingPolicies.add(norm);
+      }
+      addRow(data, true);
+      statTotal++;
+    }
+    updStats();
+    enableButtons();
+    showToast(`📊 Loaded ${dataRows.length} rows from ${f.name}`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+// ─── EXCEL EXPORT ─────────────────────────────────────────────
+function exportExcel() {
+  if (rows.length === 0) return showToast('No data to export');
+
+  const headers = ['SR', 'PDF NAME', ...FIELDS];
+  const wsData = [headers];
+
+  rows.forEach((r, i) => {
+    const row = [i + 1, r.data['PDF NAME'] || ''];
+    FIELDS.forEach(f => row.push(r.data[f] || ''));
+    wsData.push(row);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols'] = [
+    {wch:5},   // SR
+    {wch:30},  // PDF NAME
+    {wch:28},{wch:22},{wch:28},{wch:16},{wch:16},
+    {wch:22},{wch:14},{wch:10},{wch:18},{wch:22},{wch:13},
+    {wch:25},{wch:14},{wch:14}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'POLICIES');
+  XLSX.writeFile(wb, excelFileName);
+  showToast(`✅ Saved as ${excelFileName}`);
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────
+function clearAll() {
+  if (!confirm('Sab rows delete karein?')) return;
+  rows = [];
+  existingPolicies.clear();
+  statTotal = 0; statSkipped = 0; statErrors = 0;
+  updStats();
+  showEmpty();
+  document.getElementById('exportBtn').disabled = true;
+  document.getElementById('clearBtn').disabled = true;
+  document.getElementById('excelLoadedName').textContent = '';
+}
+
+function enableButtons() {
+  document.getElementById('exportBtn').disabled = false;
+  document.getElementById('clearBtn').disabled = false;
+}
+
+function updStats() {
+  document.getElementById('statTotal').textContent = statTotal;
+  document.getElementById('statSkipped').textContent = statSkipped;
+  document.getElementById('statErrors').textContent = statErrors;
+}
+
+function showProgress(show) {
+  document.getElementById('progressBar').style.display = show ? 'block' : 'none';
+  document.getElementById('progressText').style.display = show ? 'block' : 'none';
+}
+
+function setProgress(pct, txt) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = txt;
+}
+
+function showLog(show) {
+  document.getElementById('log').style.display = show ? 'block' : 'none';
+}
+
+function logMsg(msg, type = 'info') {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-' + type;
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.innerHTML = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
